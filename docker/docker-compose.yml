@@ -1,0 +1,41 @@
+services:
+  mc:
+    image: itzg/minecraft-server:java21
+    container_name: strux-mc
+    ports:
+      - "25565:25565"
+      # RCON for E2E tests + `docker exec` shortcuts.
+      - "25575:25575"
+    environment:
+      EULA: "TRUE"
+      TYPE: "PAPER"
+      VERSION: "1.21.4"
+      ONLINE_MODE: "FALSE"        # connect from any local client for testing
+      MEMORY: "2500M"          # heap; sized for the colima VM (was 1500M — too tight, big cascades pushed JVM to OOM)
+      MODE: "creative"            # build/fly straight away
+      DIFFICULTY: "peaceful"
+      LEVEL_TYPE: "FLAT"          # flat sandbox is ideal for testing collapses
+      SPAWN_PROTECTION: "0"       # build anywhere, including spawn
+      VIEW_DISTANCE: "8"
+      ENABLE_RCON: "TRUE"
+      RCON_PASSWORD: "strux-e2e"  # known password so E2E tests can connect via host:25575
+      OVERRIDE_SERVER_PROPERTIES: "TRUE"
+      # Skip re-downloading Paper on each start; use the cached jar in ./data/.
+      # DNS resolution inside the colima container is unreliable for fill.papermc.io.
+      SKIP_AUTO_UPDATE: "TRUE"
+      # Let clients of (almost) any version connect. itzg auto-downloads these
+      # from Modrinth, matched to the server version.
+      # worldedit pinned to the last 7.3.x (Java 21); 7.4.x requires Java 25
+      # worldguard: region/world physics gating (strux-physics flag)
+      # coreprotect: collapse logging for /co inspect + rollback
+      MODRINTH_PROJECTS: "viaversion,viabackwards,viarewind,worldedit:7.3.19,worldguard,coreprotect"
+    volumes:
+      - ./data:/data
+      # Built plugins (shaded, each bundles strux core). Rebuild + restart to update.
+      - ../adapter-minecraft/build/libs/StructuralIntegrity-1.0.0.jar:/data/plugins/StructuralIntegrity.jar:ro
+    stdin_open: true
+    tty: true
+    restart: unless-stopped
+    dns:
+      - 8.8.8.8
+      - 8.8.4.4

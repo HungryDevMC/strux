@@ -1,0 +1,45 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+# Needs write to create the GitHub Release and upload the jar asset.
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Build & publish release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 21 (Temurin)
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Set up Gradle (with build cache)
+        uses: gradle/actions/setup-gradle@v4
+
+      # Never ship an untested tag.
+      - name: Build & test
+        run: ./gradlew build --stacktrace
+
+      - name: Assemble plugin jar
+        run: ./gradlew :adapter-minecraft:shadowJar --stacktrace
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: adapter-minecraft/build/libs/StructuralIntegrity-*.jar
+          generate_release_notes: true
+          fail_on_unmatched_files: true

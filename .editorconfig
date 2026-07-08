@@ -1,0 +1,29 @@
+# EditorConfig (https://editorconfig.org/) — keeps editors aligned
+# with the same whitespace/encoding palantir-java-format + Spotless enforce.
+# This is defensive: editors that ignore it will get fixed up on
+# `./gradlew spotlessApply`, but agreeing up front avoids needless diffs.
+
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+indent_style = space
+
+# Java + Kotlin DSL + Gradle scripts — 4-space (matches palantir + ktfmt kotlinlangStyle)
+[*.{java,kt,kts,gradle}]
+indent_size = 4
+
+# YAML, JSON, Markdown — 2-space (community default; matches gson().indentWithSpaces(2))
+[*.{yml,yaml,json,md}]
+indent_size = 2
+
+# Shell scripts — 2-space, no tabs (POSIX-friendly)
+[*.{sh,bash}]
+indent_size = 2
+
+# Makefiles need tabs
+[Makefile]
+indent_style = tab

@@ -1,0 +1,99 @@
+site_name: Strux Documentation
+site_description: Realistic structural physics for voxel games
+site_url: https://strux.gesp.be
+docs_dir: docs/wiki
+
+# The GitBook table-of-contents — kept in the repo, but not part of the
+# published MkDocs site (keeps `mkdocs build --strict` clean).
+exclude_docs: |
+  SUMMARY.md
+
+theme:
+  name: material
+  logo: assets/img/strux-logo.png
+  favicon: assets/img/favicon.png
+  font: false
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: deep purple
+      accent: amber
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: deep purple
+      accent: amber
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+  features:
+    - navigation.instant
+    - navigation.tracking
+    - navigation.tabs
+    - navigation.sections
+    - navigation.expand
+    - navigation.top
+    - search.suggest
+    - search.highlight
+    - content.code.copy
+
+plugins:
+  - search
+  - offline
+
+extra_css:
+  - assets/stylesheets/strux-pixel.css
+
+markdown_extensions:
+  - admonition
+  - pymdownx.details
+  - pymdownx.superfences
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets:
+      base_path:
+        - docs
+        - .
+  - pymdownx.tabbed:
+      alternate_style: true
+  - tables
+  - attr_list
+  - md_in_html
+  - toc:
+      permalink: true
+
+nav:
+  - Home: index.md
+  - For Players:
+      - How Buildings Work: player-guide/index.md
+      - Building Materials: player-guide/materials.md
+      - Damage & Hazards: player-guide/hazards.md
+      - Building Tips: player-guide/tips.md
+  - For Admins:
+      - Overview: admin/index.md
+      - Integrations: admin/integrations.md
+      - Getting Started:
+          - Installation: getting-started/installation.md
+          - Quick Start: getting-started/quickstart.md
+      - Configuration:
+          - Overview: config/index.md
+          - Physics Settings: config/physics.md
+          - Effects & Visuals: config/effects.md
+          - Weather & Environment: config/weather.md
+          - Temperature & Heat Strength: config/temperature.md
+  - For Developers:
+      - Developer Guide: dev/index.md
+      - How the Physics Works: dev/physics-model.md
+      - Architecture: dev/architecture.md
+      - API Reference: dev/api.md
+      - Engine SDK: dev/engine-sdk.md
+  - Changelog: changelog.md
+
+extra:
+  social:
+    - icon: fontawesome/brands/discord
+      link: https://discord.gesp.be
+      name: Join the Strux Discord

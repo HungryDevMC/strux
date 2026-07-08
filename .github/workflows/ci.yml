@@ -1,0 +1,104 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# Cancel superseded runs on the same branch/PR — keep the queue lean.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+# Least privilege: CI only needs to read the repo.
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build, test & lint
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 21 (Temurin)
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Set up Gradle (with build cache)
+        uses: gradle/actions/setup-gradle@v4
+
+      # `build` = all module tests + spotlessCheck + checkNoWildcardImports
+      # + the deterministic PerformanceGateTest inside :core:test.
+      - name: Build, test & lint
+        run: ./gradlew build --stacktrace
+
+      - name: Assemble plugin jar
+        run: ./gradlew :adapter-minecraft:shadowJar --stacktrace
+
+      - name: Upload plugin jar
+        uses: actions/upload-artifact@v4
+        with:
+          name: StructuralIntegrity-plugin
+          path: adapter-minecraft/build/libs/StructuralIntegrity-*.jar
+          if-no-files-found: error
+
+      # Test reports are only interesting when something broke.
+      - name: Upload test reports
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-reports
+          path: '**/build/reports/tests/'
+          if-no-files-found: ignore
+
+  benchmark:
+    name: JMH benchmarks (perf history)
+    # Only on pushes to main: benchmark-action needs GITHUB_TOKEN write to push
+    # gh-pages, which fork PRs don't get. Noisy shared runners must never gate CI.
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    permissions:
+      contents: write   # auto-push perf history to the gh-pages branch
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 21 (Temurin)
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Set up Gradle (with build cache)
+        uses: gradle/actions/setup-gradle@v4
+
+      # SHORT profile: 1 fork, 1 warmup + 3 measurement iterations of 1s each,
+      # restricted to the hot-path solver/cascade benchmarks. Keeps the job well
+      # under ~15 min on a shared runner. Drop the regex to benchmark everything.
+      - name: Run JMH (short profile)
+        run: >
+          ./gradlew :benchmarks:jmh
+          -PjmhArgs="-f 1 -wi 1 -i 3 -r 1s -w 1s (Solver|Cascade|ScopedSolve)"
+          --stacktrace
+
+      - name: Humanize benchmark names
+        run: python3 benchmarks/scripts/humanize-results.py benchmarks/build/results/jmh/results.json
+
+      - name: Publish benchmark results to gh-pages
+        uses: benchmark-action/github-action-benchmark@v1
+        with:
+          name: strux JMH benchmarks
+          tool: jmh
+          output-file-path: benchmarks/build/results/jmh/results.json
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          auto-push: true
+          gh-pages-branch: gh-pages
+          benchmark-data-dir-path: bench
+          comment-on-alert: true
+          alert-threshold: '150%'
+          fail-on-alert: false

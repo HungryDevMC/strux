@@ -1,0 +1,16 @@
+trigger: column-impact-undermine
+initial: 9
+destroyed: 1
+collapsed: 7
+survivors: 1
+destroyed-positions:
+  (0,1,0)
+collapsed-positions:
+  (0,2,0)
+  (0,3,0)
+  (0,4,0)
+  (0,5,0)
+  (0,6,0)
+  (0,7,0)
+  (0,8,0)
+damaged-survivor-positions: (none)

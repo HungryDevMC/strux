@@ -1,0 +1,31 @@
+name: StructuralIntegrity
+version: '1.0.0'
+main: dev.gesp.structural.minecraft.StructuralIntegrityPlugin
+api-version: '1.21'
+description: Makes blocks collapse realistically - knock out a support, watch the building fall!
+author: gesp
+website: https://gesp.be
+softdepend: [WorldEdit, WorldGuard, CoreProtect, Vault, PlaceholderAPI, Towny, Factions]
+
+commands:
+  engineer:
+    description: Toggle engineer mode - visualize structural load paths
+    usage: /engineer
+    aliases: [stress, loadpath]
+  strux:
+    description: Structural integrity - scan, reinforce, repair, grade, predict, perf
+    usage: /strux <wand|pos1|pos2|scan|reinforce|repair|grade|predict|perf|beam|demo>
+
+permissions:
+  structuralintegrity.engineer:
+    description: Allows use of engineer mode
+    default: true
+  structuralintegrity.reinforce:
+    description: Allows reinforcing blocks via /strux reinforce and Support Beams
+    default: true
+  structuralintegrity.repair:
+    description: Allows repairing damaged blocks via /strux repair
+    default: true
+  structuralintegrity.admin:
+    description: Admin actions (e.g. /strux beam to obtain Support Beam items)
+    default: op

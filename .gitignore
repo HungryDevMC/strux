@@ -1,0 +1,30 @@
+# Build outputs
+build/
+.gradle/
+
+# Local run journals
+runs/
+
+# Server logs
+server.out
+*.log
+
+# IDE
+.idea/
+*.iml
+.vscode/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Local tooling / editor assistant config (never committed here)
+.claude/
+CLAUDE.md
+.wow/
+
+# Test server
+test-server/
+
+# Bootstrap notes
+structural_integrity_bootstrap.md

@@ -1,0 +1,9 @@
+trigger: wall-break-base-arch
+initial: 42
+destroyed: 1
+collapsed: 0
+survivors: 41
+destroyed-positions:
+  (3,1,0)
+collapsed-positions: (none)
+damaged-survivor-positions: (none)

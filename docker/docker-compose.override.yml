@@ -1,0 +1,15 @@
+# Local-only override (not committed): run the already-cached Paper jar directly so the
+# itzg init never has to reach fill.papermc.io. colima's DNS to papermc is unreliable, which
+# otherwise puts the container in a "Failed to download paper" restart loop even though the
+# jar is present in ./data. Complements docker-compose.yml's SKIP_AUTO_UPDATE. Delete this
+# file to return to normal online resolution.
+services:
+    mc:
+        environment:
+            TYPE: "CUSTOM"
+            CUSTOM_SERVER: "/data/paper-1.21.4-232.jar"
+            # The worldedit/worldguard/via*/coreprotect jars are already present in
+            # ./data/plugins from an earlier online run, and Paper loads them directly.
+            # Clear MODRINTH_PROJECTS so itzg doesn't try to re-resolve them (which needs
+            # the same dead DNS) — TYPE=CUSTOM otherwise demands a MODRINTH_LOADER.
+            MODRINTH_PROJECTS: !reset null

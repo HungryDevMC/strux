@@ -1,0 +1,20 @@
+{
+  "_comment": "Plain-English labels for the JMH benchmarks, keyed by fully-qualified <class>.<method>. humanize-results.py rewrites each results.json entry's 'benchmark' field to the matching description and appends any @Param values in parentheses (e.g. 'height = 10'). Descriptions state WHAT is measured and the scenario's scale; numbers are derived from the benchmark code and Builds.java shapes, not invented.",
+
+  "dev.gesp.structural.bench.BlastBenchmark.towerBlast": "Explosion on a solid 6x6x10 stone tower (~360 blocks): direct blast, occlusion, and the gravity cascade it triggers",
+
+  "dev.gesp.structural.bench.CascadeBenchmark.columnFullCollapse": "Cascade: a 40-block-tall column loses its base and drops as floating debris",
+  "dev.gesp.structural.bench.CascadeBenchmark.bridgeTrimBack": "Cascade: knock out one pillar of a 21-wide bridge so the deck cantilevers and trims back",
+  "dev.gesp.structural.bench.CascadeBenchmark.siegeTowerSmall": "Scoped cascade: break a block mid-tower on 50x50 siege terrain (~375-block tower on a small connected world)",
+  "dev.gesp.structural.bench.CascadeBenchmark.siegeTowerLarge": "Scoped cascade: break a block mid-tower on 200x200 siege terrain (same tower, large connected world - terrain size should not matter)",
+
+  "dev.gesp.structural.bench.FloatingDetectionBenchmark.floatingViaIndex": "Whole-world 'what is floating?' after an edit, via the maintained connectivity index (width x width x 4 grounded slab)",
+  "dev.gesp.structural.bench.FloatingDetectionBenchmark.floatingViaBfs": "Whole-world 'what is floating?' after an edit, via a from-scratch flood-fill from bedrock (the old approach)",
+  "dev.gesp.structural.bench.FloatingDetectionBenchmark.singleBlockViaIndex": "'Is this one block still grounded?' after an edit, via the incremental connectivity index",
+  "dev.gesp.structural.bench.FloatingDetectionBenchmark.singleBlockViaWholeScan": "'Is this one block still grounded?' after an edit, via a whole-graph flood-fill (the old approach)",
+
+  "dev.gesp.structural.bench.ScopedSolveBenchmark.solveOneComponent": "Scoped stress-solve of one structure in a shared world (should stay flat as the world grows)",
+  "dev.gesp.structural.bench.ScopedSolveBenchmark.solveWholeWorld": "Whole-world stress-solve: every structure in the world (grows with structure count)",
+
+  "dev.gesp.structural.bench.SolverBenchmark.solveAll": "One full stress solve over a 5x5xheight stone tower"
+}

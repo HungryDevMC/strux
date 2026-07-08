@@ -1,0 +1,1550 @@
+# ╔═══════════════════════════════════════════════════════════════════════════╗
+# ║              STRUCTURAL INTEGRITY - PHYSICS SETTINGS                      ║
+# ║                                                                           ║
+# ║  This file controls how blocks break and collapse.                        ║
+# ║  Change these numbers to make structures stronger or weaker!              ║
+# ╚═══════════════════════════════════════════════════════════════════════════╝
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+#  WHAT IS STRESS?
+# ─────────────────────────────────────────────────────────────────────────────
+#
+#  Stress is how much "effort" a block needs to hold up other blocks.
+#  When stress goes over 100%, the block BREAKS!
+#
+#  There are TWO types of stress:
+#
+#    1. VERTICAL STRESS = Weight pushing straight down
+#       (like stacking books - the bottom book feels all the weight)
+#
+#    2. MOMENT STRESS = Sideways pulling force (torque)
+#       (like holding a heavy bucket at arm's length - your shoulder hurts!)
+#
+#  Total stress = vertical stress + moment stress
+#
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+#  MOMENT (CANTILEVER) SETTINGS
+# ═══════════════════════════════════════════════════════════════════════════
+#
+#  A CANTILEVER is blocks sticking out sideways from a support:
+#
+#      [GROUND]──[A]──[B]──[C]──[D]
+#                 ↑
+#            Block A feels "pulled down" by B, C, D
+#            (like holding a heavy bucket at arm's length)
+#
+#  The longer the cantilever, the more moment stress on the anchor block!
+
+
+# How much moment stress matters (multiplier)
+#
+#   1.0 = Normal (realistic physics)
+#   0.5 = Half as much moment stress (more forgiving, longer cantilevers possible)
+#   2.0 = Double moment stress (stricter, cantilevers break easier)
+#   0.0 = No moment stress (cantilevers NEVER break from being too long)
+#
+moment-multiplier: 1.0
+
+
+# How much to REDUCE moment stress for BEAMS (supported on BOTH ends)
+#
+#   A BEAM looks like this:
+#      [GROUND]──[A]──[B]──[C]──[GROUND]
+#
+#   Beams are stronger than cantilevers because both ends share the load!
+#
+#   1.0 = Beams have NO moment stress (very strong, default)
+#   0.8 = Beams have 20% of normal moment stress
+#   0.5 = Beams have 50% of normal moment stress
+#   0.0 = Beams are treated same as cantilevers (no reduction)
+#
+#   TIP: If building a tower on a beam feels "too easy", try 0.8 or 0.5
+#
+beam-moment-reduction: 1.0
+
+# Bending depth (section modulus). When true, a cantilever's bending capacity scales with
+# the SQUARE of its section depth (S = b·d²/6): a beam d nodes thick (measured vertically)
+# carries its sideways load at 1/d² the stress, so thick beams/decks are realistically much
+# stronger than thin ones. A 1-block-thick beam is unchanged, so this only ever makes thick
+# builds SAFER — never thinner ones weaker. On by default here; set false to match the old
+# "every beam fails at the same length regardless of thickness" behaviour.
+bending-depth-enabled: true
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+#  CASCADE (CHAIN REACTION) SETTINGS
+# ═══════════════════════════════════════════════════════════════════════════
+#
+#  When one block breaks, it can cause others to break too!
+#  This is called a CASCADE (chain reaction).
+#
+#      [E] 💥
+#       │
+#      [D] 💥      Breaking [B] causes [C], [D], [E] to fall!
+#       │
+#      [C] 💥
+#       │
+#      [B] ← You break this
+#       │
+#      [A]
+#       │
+#     [GND]
+
+
+# Maximum blocks that can collapse in ONE chain reaction
+#
+#   This prevents the server from freezing if someone builds
+#   a massive structure and breaks one block.
+#
+#   50  = Max 50 blocks collapse (default, balanced)
+#   100 = Max 100 blocks (bigger chain reactions allowed)
+#   10  = Only 10 blocks (very limited chain reactions)
+#
+#   This is a PER-TICK budget, not a hard limit on the whole collapse: if a
+#   collapse is bigger than this, the rest finishes over the next ticks (see
+#   cascade.max-resume-ticks) instead of being left floating in the air.
+#
+max-cascade-steps: 20
+
+
+# How many extra ticks a single huge collapse may keep finishing for.
+#
+#   A collapse bigger than max-cascade-steps spreads across ticks, doing at
+#   most max-cascade-steps blocks each tick. This caps how long that may run
+#   so a pathological structure can never tick forever; if it is hit you get a
+#   WARNING in the log. The default comfortably covers very large structures.
+#
+cascade:
+  max-resume-ticks: 200
+
+  # Wall-clock time budget (milliseconds) for ONE main-thread settle pass — a
+  # block-break cascade or one tick of a resumed collapse.
+  #
+  #   Solving a huge structure (say, a whole battlefield's terrain in one
+  #   graph) can cost more than a tick. When a settle pass exceeds this budget
+  #   it PAUSES and finishes over the next ticks instead of freezing the
+  #   server: players keep fighting, the falling blocks just land a bit later.
+  #
+  #   The budget now binds INSIDE the two heavy units of a settle — the affected-
+  #   region closure and the stress level-scan — not just between them, so a
+  #   keep-sized collapse can no longer stall a tick with one giant pass. A pass
+  #   overshoots the budget by at most one unit (one BFS chunk or one distance
+  #   level), so keep ~2x headroom: at 8ms a pass lands within ~16ms.
+  #
+  #   8  = default (about an eighth of a tick per pass; a big keep crumbles over
+  #        many ticks instead of one long freeze)
+  #   0  = no budget (legacy: a settle runs until done, however long it takes)
+  #
+  settle-budget-ms: 8
+
+
+  # Compute big collapses OFF the main thread, then apply them in budgeted batches.
+  #
+  #   On a keep-sized structure a single settle pass (working out "what falls")
+  #   costs more than a whole tick, and the settle-budget-ms pause above can only
+  #   stop it BETWEEN whole steps — so one big blast still briefly hitches the
+  #   server. With this on, strux takes a quick snapshot of the affected region,
+  #   works out the collapse on a helper thread (the physics result is identical),
+  #   and then removes the blocks a few per tick through the normal collapse path.
+  #   The main thread never runs the heavy solve, so a giant collapse no longer
+  #   spikes the tick.
+  #
+  #   If a player breaks, places, damages or reinforces a block inside the region
+  #   while the helper is still thinking, the half-done answer is thrown away and
+  #   recomputed so the player's edit always wins. After a few conflicts in a row
+  #   it falls back to solving on the main thread under settle-budget-ms.
+  #
+  #   true  = solve big collapses off-thread (default, recommended)
+  #   false = always solve on the main thread (legacy, byte-identical timing)
+  #
+  async-settle: true
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+#  KINETIC IMPACT (PROJECTILES / RAMS)
+# ═══════════════════════════════════════════════════════════════════════════
+#
+#  Arrows, catapult stones and ram strikes damage structures by their kinetic
+#  energy (E = ½ · mass · speed²), NOT a fixed per-projectile number. A light,
+#  slow hit only cracks the surface — and ten of them accumulate to break it;
+#  a heavy, fast hit punches through and undermines what's behind.
+#
+impact:
+  # Master switch for projectile/ram structural damage.
+  enabled: true
+
+  # Overall multiplier on every impact's computed energy. Raise to make sieges
+  # quicker (walls fall faster), lower to make them grindier. 1.0 = as-computed.
+  energy-scale: 1.0
+
+  # Energy a blast-resistance-1 block absorbs before it is cracked clean through.
+  # A block's budget is blastResistance × this. Higher = tougher walls, shallower
+  # penetration. Tune against your projectile energies.
+  penetration-cost: 4.0
+
+  # Fraction of absorbed-energy/toughness turned into persistent crack damage.
+  #   1.0 = a block that absorbs its full toughness is destroyed (default)
+  #   0.5 = more forgiving — twice as many hits to break a wall
+  damage-scale: 1.0
+
+  # Hard cap on how many blocks one impact can bore through, even with huge
+  # energy. Bounds gameplay (no tunnelling across a whole base) and cost.
+  max-penetration: 6
+
+  # Safety seatbelt: how many milliseconds of the server tick the impact
+  # processor may spend settling queued hits. Projectile hits are queued, not
+  # handled on the spot, then drained a little each tick within this budget — so
+  # a whole volley against a giant structure can never freeze a single tick. A
+  # backlog just spreads over more ticks (each impact resolves ≤1 tick late, in
+  # the order it landed). Raise for snappier resolution, lower if a busy siege
+  # makes the server stutter.
+  tick-budget-ms: 10.0
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+#  BLAST (EXPLOSIONS)
+# ═══════════════════════════════════════════════════════════════════════════
+#
+#  Explosions (TNT, creepers, fireballs) crater tracked structures and undermine
+#  what they hold up. The crater + cascade solve does NOT run on the spot: the
+#  explosion event only claims our tracked blocks and queues the blast, then a
+#  processor settles queued blasts a little each tick. So a TNT chain or a cannon
+#  volley — several explosions in one tick — spreads its work over the next ticks
+#  instead of all solving in the one tick they landed in and freezing the server.
+#
+blast:
+  # Safety seatbelt: how many milliseconds of the server tick the blast processor
+  # may spend settling queued explosions. Explosions are queued, not handled on the
+  # spot, then drained a little each tick within this budget — so several blasts in
+  # one tick (a TNT chain) can never freeze a single tick. A backlog just spreads
+  # over more ticks (each blast settles ≤1 tick late, in the order it fired). Raise
+  # for snappier resolution, lower if a busy siege makes the server stutter.
+  tick-budget-ms: 10.0
+
+  # How many candidate positions one very large explosion scans per tick. A blast's
+  # first phase checks every block inside its blast radius (cost grows with the cube
+  # of the radius), so a single huge explosion is no longer solved in one frozen
+  # piece: the processor scans this many positions per tick (still under
+  # tick-budget-ms), then applies the crater + collapse once the scan finishes.
+  # Only one blast is scanned at a time — the next waits its turn. Raise so big blasts
+  # resolve in fewer ticks; lower if one giant explosion still makes the server hitch.
+  max-scan-per-tick: 4096
+
+  # How many crater blocks are turned to air per tick. Once a blast's scan finishes,
+  # its crater is NOT carved all at once — that 2000-block all-in-one-tick removal was
+  # what froze the server. Instead the crater forms a few blocks per tick: at most this
+  # many removals per tick (still under tick-budget-ms). A big crater spreads over more
+  # ticks (a 2000-block crater at 64/tick takes ~30 ticks ≈ 1.5s) instead of hitching.
+  # Raise so craters appear faster; lower if a giant blast still makes the server stutter.
+  max-crater-removals-per-tick: 64
+
+  # Solve each blast's heavy "which blocks are overloaded?" stress query on a
+  # background thread instead of the main thread.
+  #
+  #   On a big map that one query can cost more than a whole tick, and it cannot
+  #   be split into smaller pieces — it was the last remaining cause of explosion
+  #   stutter. With this on, the blast pauses, a helper thread computes the
+  #   answer against a snapshot (the physics result is identical), and the blast
+  #   resumes when it is ready — the main thread waits at most ~25ms, ever.
+  #
+  #   true  = default (recommended)
+  #   false = run the query inline on the main thread (legacy)
+  #
+  async-overload-queries: true
+
+  # Play the per-block break sound+particle for 1 in this many crater removals. A
+  # crater of thousands of blocks playing an effect for EVERY one is a server AND a
+  # client spike, so we sample: 8 means roughly one in eight removed blocks gets its
+  # little break effect, and one aggregate "cascade complete" boom still plays at the
+  # end. 1 = play for every block (old behaviour, noisy on huge craters); higher =
+  # quieter and cheaper. Has no effect on the physics — purely how loud/busy it looks.
+  crater-effect-sample-rate: 8
+
+  # Let strux use FastAsyncWorldEdit (FAWE) to do the crater's block writes in one
+  # bulk/async edit when FAWE (or WorldEdit) is installed. This only changes HOW the
+  # air is written — strux still does protection, block-logging, effects and debris
+  # itself. The seam and this flag are wired now; the FAWE writer itself ships in a
+  # later update (it needs a live FAWE server to test), so for now strux always uses
+  # its own streamed per-tick block writes and just notes when FAWE is detected.
+  # true = use FAWE once its writer ships; false = always use the streamed writes.
+  fawe-acceleration: true
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+#  FIRE (HEAT) DEGRADATION
+# ═══════════════════════════════════════════════════════════════════════════
+#
+#  Sustained fire weakens a structure over time — the slow-burn counterpart to
+#  explosions and projectiles. A flammable block touched by fire chars away fast;
+#  any block next to fire/lava heats up slowly (radiant), so a long enough fire
+#  can even cook a metal frame down. Each block's rate is divided by its fire
+#  resistance (wood low, stone high), so material choice matters in a siege.
+#
+#  Only fires next to war-zone structures are tracked (gated by region protection),
+#  and water/rain extinguishes them — so defenders have counterplay. Feeds the
+#  same damage as blasts/impacts, so cracks show it and a softened wall is primed
+#  for a finishing blow.
+#
+fire:
+  # Master switch for fire weakening structures.
+  enabled: true
+
+  # Capacity a fire-resistance-1 block directly on fire loses per game TICK
+  # (a material's real rate is this ÷ its fire resistance). Higher = walls burn
+  # down faster. Default ≈ a resistance-1 block fully charred in ~30s of fire.
+  damage-per-tick: 0.0006
+
+  # Radiant heat as a fraction of the direct-burn rate: how much a block merely
+  # NEXT TO fire/lava (not itself burning) weakens. This is what lets fire affect
+  # non-flammable stone and metal. 0.0 = only burning blocks take damage.
+  radiant-factor: 0.25
+
+  # How often (in ticks) the scorch scan runs. 20 = once a second (default).
+  # Higher = cheaper but coarser; the per-tick rate is applied across the interval.
+  scan-interval-ticks: 20
+
+  # A flame with NOTHING flammable beside it (e.g. lit against bare stone) has
+  # no fuel — it gutters out after this many ticks instead of burning forever.
+  # Touching any flammable block resets the clock, and lava is exempt (it IS its
+  # own fuel), so a sustained, fuelled siege fire still cooks a wall down — only
+  # the eternal flame on a stone keep dies. 0 = never extinguish (old behavior).
+  barren-burnout-ticks: 600
+
+  # Safety seatbelt: how many milliseconds of the server tick one scorch pass may
+  # spend. If a pass runs long (many fires, a big settle), it stops where it is and
+  # the remaining fires wait for the next scan — a slightly slower burn, never a
+  # frozen tick. Raise for snappier fire damage, lower if a big blaze stutters.
+  tick-budget-ms: 10.0
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+#  TEMPERATURE-BASED STRENGTH (heat/cold weakening)
+# ═══════════════════════════════════════════════════════════════════════════
+#
+#  Hot blocks get WEAKER. A steel beam in a fire sags; stone near lava softens.
+#  This scales a block's load CAPACITY with its current temperature using REAL
+#  engineering curves (Eurocode-3 steel, Eurocode-2 concrete, a wood char model).
+#
+#  °C MAPPING (Minecraft's abstract heat → plausible Celsius):
+#    lava   ≈ 1100 °C     fire ≈ 800 °C     magma block ≈ 400 °C
+#    biome ambient: snowy −10 °C · temperate 20 °C · desert 45 °C · nether 60 °C
+#  A source's heat falls off with distance AND through intervening SOLID blocks,
+#  so a thick wall's interior stays cooler (and stronger) than its exposed face.
+#
+#  THERMAL SHOCK: heat a brittle block (stone, brick, fired ceramic) then suddenly
+#  cool it (water/rain, lava removed) and it CRACKS — a one-shot persistent damage.
+#  Ductile metal and fibrous wood barely care.
+#
+#  This is a material-STRENGTH model, not a full thermal-stress simulation (we do
+#  not compute internal expansion stresses — a deliberate omission). It NEVER
+#  touches moisture (that is weather's axis), and a block FIRE is already burning
+#  is left to the fire model alone, so heat is never counted twice on one block.
+#
+#  OFF BY DEFAULT: when disabled, capacity is unchanged — byte-identical physics.
+temperature-strength:
+  # Master switch. false = temperature never changes capacity (default).
+  enabled: false
+
+  # The ambient °C assigned to an unheated block in a temperate biome.
+  comfort-temperature-c: 20.0
+
+  # THERMAL SHOCK — a sudden temperature DROP smaller than this (°C) cracks
+  # nothing (the block equalises in time).
+  shock-onset-c: 150.0
+  # The drop, ABOVE the onset, at which shock cracking reaches the material's full
+  # brittleness. A drop of (onset + span) delivers maximum shock damage.
+  shock-span-c: 500.0
+
+  # How far (in blocks) to look around each tracked block for heat sources.
+  scan-radius: 5
+  # Distance at which a source's above-ambient heat halves.
+  heat-falloff-radius: 4
+  # Extra falloff (in equivalent blocks) charged per intervening SOLID block —
+  # the "thick wall resists heat" knob. Higher = thicker walls insulate more.
+  solid-insulation-blocks: 3.0
+
+  # How often (in ticks) the temperature scan runs. 40 = every 2 seconds.
+  scan-interval-ticks: 40
+  # Seatbelt: max milliseconds of a tick one temperature pass may spend; the rest
+  # waits for the next scan (a slower effect, never a frozen tick).
+  tick-budget-ms: 10.0
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+#  ENTITY WEIGHT (players/mobs on structures)
+# ═══════════════════════════════════════════════════════════════════════════
+#
+#  Entities standing on or falling onto stressed/damaged blocks add load:
+#
+#    STANDING WEIGHT (continuous):
+#    An entity on a weak block adds their mass as temporary load. If
+#    (currentStress + entityMass) > effectiveMaxLoad → collapse.
+#
+#    FALL IMPACT (event-driven):
+#    Landing from height applies kinetic energy: E = ½mv² where v = √(2gh).
+#    Higher falls = quadratically more impact. Jumping onto a cracked floor
+#    from 3 blocks up can collapse it; walking across is safe.
+#
+#  Only blocks above the stress/damage thresholds are checked, so normal
+#  gameplay isn't affected — entities only threaten already-weak structures.
+#
+entity-weight:
+  # Master switch for entity weight mechanics.
+  enabled: true
+
+  # How often (in ticks) to scan for entities on stressed blocks.
+  # 10 = twice a second (default). Higher = less frequent, cheaper.
+  scan-interval-ticks: 10
+
+  # Only affect blocks at or above these thresholds (either triggers check):
+  #   stress-threshold: fraction of max load (0.7 = 70%)
+  #   damage-threshold: fraction of damage taken (0.5 = 50%)
+  stress-threshold: 0.7
+  damage-threshold: 0.5
+
+  # Standing weight: entity on block adds continuous load
+  standing:
+    enabled: true
+    # Mass values per entity type. Higher mass = more stress on weak blocks.
+    mass:
+      player: 2.0
+      zombie: 2.0
+      skeleton: 1.5
+      creeper: 1.8
+      spider: 1.2
+      horse: 4.0
+      iron_golem: 8.0
+      warden: 10.0
+      default: 2.0
+
+  # Fall impact: landing from height applies kinetic energy spike
+  fall-impact:
+    enabled: true
+    # Multiplier on impact energy. 1.0 = realistic, higher = more dangerous.
+    energy-scale: 1.0
+    # Minimum fall distance (blocks) to register impact. Shorter falls ignored.
+    min-fall-distance: 2.0
+    # Fall distance at which EVEN HEALTHY blocks can break (bypasses stress/damage threshold).
+    # Below this distance, only weak blocks (stressed ≥70% OR damaged ≥50%) are affected.
+    # Set to a very high value (999) to disable — then only weak blocks ever break from falls.
+    force-impact-distance: 15.0
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+#  CONTAINER WEIGHT (heavy storage adds load)
+# ═══════════════════════════════════════════════════════════════════════════
+#
+#  A full chest, barrel, or shulker box is heavy. The block it rests on carries
+#  that weight as TEMPORARY load — just like an entity standing on a floor. Pile
+#  loot onto an already-stressed or cracked floor and it can give way.
+#
+#  Empty container ≈ base-mass. Packed full ≈ base-mass + content-weight.
+#  Only blocks at/above the thresholds are checked, so a healthy build is free.
+#
+container-weight:
+  # Master switch for container weight mechanics.
+  # Currently disabled by default — the implementation only checks already-stressed
+  # blocks, which creates unintuitive behavior. A future update will integrate
+  # container weight into the stress solver properly.
+  enabled: false
+
+  # How often (in ticks) to scan weak blocks for heavy containers above them.
+  # 20 = once a second (default). Storage changes slowly, so this can be coarse.
+  scan-interval-ticks: 20
+
+  # The empty container's own mass (added regardless of fill).
+  base-mass: 1.0
+
+  # Extra load a COMPLETELY FULL container adds on top of base-mass. The actual
+  # load scales with how full it is: load = base-mass + fillFraction * content-weight.
+  content-weight: 8.0
+
+  # Only affect blocks at or above these thresholds (either triggers a check):
+  #   stress-threshold: fraction of max load (0.7 = 70%)
+  #   damage-threshold: fraction of damage taken (0.5 = 50%)
+  stress-threshold: 0.7
+  damage-threshold: 0.5
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+#  WEATHER LOAD (rain, thunder, snow)
+# ═══════════════════════════════════════════════════════════════════════════
+#
+#  Environmental effects on exposed structures:
+#
+#    RAIN: reduces effective capacity (structures weaken when wet)
+#    THUNDER: stronger capacity reduction + random stress spikes
+#    SNOW: accumulates over time in cold biomes as additive load
+#
+#  Only blocks with direct sky access are affected (interior is safe).
+#  Clearing snow (removing the snow block above) relieves snow load.
+#
+weather:
+  # Master switch for weather effects.
+  enabled: true
+
+  # How often (in ticks) to scan for weather effects.
+  # 40 = twice a second (default). Higher = less frequent, cheaper.
+  scan-interval-ticks: 40
+
+  # Max wall-clock time (ms) one weather scan may spend before yielding the tick.
+  # On a big world the scan walks blocks chunk-by-chunk; if it runs out of budget it
+  # resumes next scan, so the weather effect arrives over a few ticks instead of
+  # freezing the server. 10.0 = half a tick. Lower = gentler but slower to apply.
+  tick-budget-ms: 10.0
+
+  # Only affect blocks with direct sky access (nothing solid above).
+  require-sky-access: true
+
+  # Rain effect: slight capacity reduction on exposed blocks
+  rain:
+    enabled: true
+    # Effective capacity multiplier during rain. 0.95 = 5% weaker.
+    capacity-multiplier: 0.95
+
+  # Thunder effect: stronger reduction + occasional stress spikes
+  thunder:
+    enabled: true
+    # Effective capacity multiplier during thunderstorm. 0.88 = 12% weaker.
+    capacity-multiplier: 0.88
+    # Random stress spikes during thunder (lightning rattles the structure)
+    stress-spikes:
+      enabled: true
+      # Chance per scan per exposed stressed block. 0.02 = 2%.
+      chance: 0.02
+      # Spike amount as fraction of remaining capacity. 0.15 = 15%.
+      amount: 0.15
+
+  # Snow effect: accumulates in cold biomes, adds load over time
+  snow:
+    enabled: true
+    # Load added per scan as fraction of block capacity. Accumulates.
+    load-per-scan: 0.005
+    # Maximum snow load (caps accumulation). 0.3 = 30% of capacity.
+    max-load: 0.3
+    # How fast snow melts when not snowing. 0.002 = slow decay.
+    decay-per-scan: 0.002
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+#  VISUAL SETTINGS
+# ═══════════════════════════════════════════════════════════════════════════
+#
+#  When you use /engineer mode, you see colored particles showing stress:
+#    GREEN  = Low stress (safe)
+#    YELLOW = Medium stress (getting risky)
+#    RED    = High stress (about to break!)
+
+
+# How often to update stress particles (in game ticks)
+#
+#   20 ticks = 1 second
+#
+#   10 = Update every 0.5 seconds (smooth, but uses more CPU)
+#   20 = Update every 1 second (balanced)
+#   40 = Update every 2 seconds (saves CPU, looks choppy)
+#
+visual-update-ticks: 10
+
+
+# Make blocks WOBBLE as they approach collapse
+#
+#   When a block gets heavily stressed (80%+), it visibly shakes on its base -
+#   a faint tremble at first, building to violent shaking as it nears 100% and
+#   failure. It's a warning sign: the harder it wobbles, the closer it is to
+#   breaking. The block doesn't actually move; it's a purely visual telegraph
+#   (no effect on the physics).
+#
+#   true  = Critical blocks wobble before failing (default, dramatic)
+#   false = No wobble (slightly fewer client-side entities)
+#
+#   This is the WOBBLE telegraph. The separate CRACK telegraph (blocks showing
+#   cracks under load/damage) is `effects.cracks-enabled`. The two are
+#   independent — enable whichever you want.
+#
+#   Default OFF: the crack telegraph carries the warning, and the wobble
+#   overlay was distracting during a raid.
+#
+pre-collapse-shake: false
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+#  EFFECTS SETTINGS - Collapse, Dust, Screen Shake, and More!
+# ═══════════════════════════════════════════════════════════════════════════
+#
+#  These settings control how dramatic the collapse effects look and feel.
+#  Play around with these to make collapses more or less intense!
+#
+effects:
+
+  # ─────────────────────────────────────────────────────────────────────────
+  #  COLLAPSE TIMING
+  # ─────────────────────────────────────────────────────────────────────────
+  #
+  #  When a block loses support, it doesn't break instantly!
+  #  First you see cracks, hear cracking sounds, then it falls.
+  #  These settings control how fast that happens.
+
+  # How long before blocks collapse when you BREAK something (in ticks)
+  #
+  #   20 ticks = 1 second
+  #
+  #   Example: If you break a pillar holding up a roof, this is how
+  #   long you have before the roof starts falling!
+  #
+  #   25 = 1.25 seconds (default - gives you time to run!)
+  #   40 = 2 seconds (very slow - lots of time to escape)
+  #   10 = 0.5 seconds (fast - better run quick!)
+  #   5  = 0.25 seconds (almost instant - very dangerous!)
+  #
+  collapse-delay-ticks: 20
+
+
+  # How long before blocks collapse after an EXPLOSION (in ticks)
+  #
+  #   Explosions feel more dramatic when collapse is faster!
+  #
+  #   4  = 0.2 seconds (default - quick and punchy)
+  #   10 = 0.5 seconds (medium - more time to see it happen)
+  #   2  = 0.1 seconds (almost instant - very intense!)
+  #
+  explosion-collapse-delay-ticks: 4
+
+
+  # How many blocks can collapse each game tick
+  #
+  #   Higher = smoother collapses, but uses more computer power
+  #   Lower  = choppy collapses, but better for slow computers
+  #
+  #   25 = Good balance (default)
+  #   50 = Very smooth (powerful computer needed)
+  #   10 = Choppy but safe (slow computer)
+  #
+  max-collapses-per-tick: 12
+
+  # FREEZE GUARD — a big collapse can never tank your server.
+  # When the server's measured TPS dips below this floor, strux automatically slows the
+  # collapse rate so the collapse can't drag TPS down further; it just takes a few more
+  # ticks and always finishes. Set to 0 to disable (collapses always run at full speed).
+  tps-floor: 18.0
+  # Even under heavy load, at least this many blocks collapse per tick, so a collapse
+  # always makes visible progress and never stalls.
+  min-collapses-per-tick: 4
+  # Cap on how many collapsing blocks play particles/sounds each tick. The blocks still
+  # vanish; this only bounds the visual packet load on huge collapses.
+  max-collapse-effects-per-tick: 8
+
+
+  # ─────────────────────────────────────────────────────────────────────────
+  #  SCREEN SHAKE
+  # ─────────────────────────────────────────────────────────────────────────
+  #
+  #  When a big building collapses, nearby players feel the ground shake!
+  #  It's like an earthquake - the bigger the collapse, the bigger the shake.
+
+  # Turn screen shake on or off
+  #
+  #   true  = Screen shakes when buildings collapse (cool and dramatic!)
+  #   false = No shaking (if it makes you dizzy)
+  #
+  screen-shake-enabled: true
+
+
+  # How many blocks need to collapse before screen shakes
+  #
+  #   Small collapses (like 3-4 blocks) don't shake the ground.
+  #   Only BIG collapses should make players feel it!
+  #
+  #   15 = Only big collapses shake (default)
+  #   5  = Even small collapses shake
+  #   30 = Only HUGE collapses shake
+  #
+  screen-shake-threshold: 8
+
+
+  # How far away can you feel the shake (in blocks)
+  #
+  #   32 = Feel it from 32 blocks away (default)
+  #   16 = Only feel it if you're close
+  #   64 = Feel it from really far away!
+  #
+  screen-shake-radius: 32.0
+
+
+  # ─────────────────────────────────────────────────────────────────────────
+  #  DUST CLOUDS
+  # ─────────────────────────────────────────────────────────────────────────
+  #
+  #  When buildings collapse, dust and debris fly everywhere!
+  #  Just like in real life when a building comes down.
+
+  # Turn dust clouds on or off
+  #
+  #   true  = Dust clouds appear during collapses (looks amazing!)
+  #   false = No dust (if your computer is slow)
+  #
+  dust-clouds-enabled: true
+
+
+  # How much dust to spawn (multiplier)
+  #
+  #   1.0 = Normal amount (default)
+  #   2.0 = DOUBLE the dust (very dramatic!)
+  #   0.5 = Half the dust (better for slow computers)
+  #   0.0 = No dust at all
+  #
+  dust-multiplier: 1.5
+
+
+  # Enable the big spreading dust wave after collapse?
+  #
+  #   When a building finishes falling, a huge cloud of dust
+  #   spreads outward like a wave - just like in demolition videos!
+  #
+  #   true  = Big dust wave spreads out (super cool!)
+  #   false = No spreading wave
+  #
+  dust-wave-enabled: true
+
+
+  # How far the dust wave can spread (in blocks)
+  #
+  #   15 = Can spread up to 15 blocks (default - impressive!)
+  #   8  = Smaller wave
+  #   25 = HUGE wave (might cause lag on slow computers)
+  #
+  dust-wave-max-radius: 20.0
+
+
+  # ─────────────────────────────────────────────────────────────────────────
+  #  STRESS PARTICLES (warning particles on stressed blocks)
+  # ─────────────────────────────────────────────────────────────────────────
+  #
+  #  When blocks are under too much stress, colored particles appear:
+  #    YELLOW = Getting stressed (be careful!)
+  #    ORANGE = Very stressed (danger zone!)
+  #    RED    = About to break! (run away!)
+
+  # Stress level for YELLOW particles (0.0-1.0, where 1.0 = 100%)
+  #
+  #   0.50 = Show yellow at 50% stress (default)
+  #   0.30 = Show yellow earlier (more warnings)
+  #   0.70 = Show yellow later (fewer warnings)
+  #
+  stress-caution-threshold: 0.50
+
+
+  # Stress level for ORANGE particles (0.0-1.0)
+  #
+  #   0.80 = Show orange at 80% stress (default)
+  #
+  stress-danger-threshold: 0.80
+
+
+  # Stress level for RED particles + flames (0.0-1.0)
+  #
+  #   0.95 = Show red at 95% stress (default - almost breaking!)
+  #
+  stress-critical-threshold: 0.95
+
+
+  # Size of the stress particles (0.1-2.0)
+  #
+  #   0.7 = Medium size (default)
+  #   1.0 = Bigger particles
+  #   0.4 = Smaller particles
+  #
+  stress-particle-size: 0.7
+
+
+  # Ramp the ambient stress sound with proximity to failure?
+  #
+  #   true  = a stressed block "talks" more often and more alarmingly the closer
+  #           it gets to failing: soft creak → groan → sharp crack (default)
+  #   false = flat danger/critical sound regardless of how close to collapse
+  #
+  escalating-stress-audio: true
+
+
+  # Volume multiplier for stress warning sounds (creaks, groans, etc.)
+  #
+  #   1.0  = Full volume (engine default)
+  #   0.5  = Half volume (less intrusive)
+  #   0.0  = Silent (only visual cracks, no audio)
+  #
+  stress-audio-volume: 0.6
+
+
+  # ─────────────────────────────────────────────────────────────────────────
+  #  CRACKING WARNINGS (sounds before collapse)
+  # ─────────────────────────────────────────────────────────────────────────
+  #
+  #  Before blocks collapse, you hear cracking sounds and see debris!
+  #  This gives you a warning that something is about to fall.
+
+  # Turn cracking warnings on or off
+  #
+  #   true  = Hear cracks before collapse (helpful warning!)
+  #   false = No warning sounds
+  #
+  cracking-warnings-enabled: true
+
+
+  # How often cracking sounds play (in ticks, lower = more frequent)
+  #
+  #   5  = Every 0.25 seconds (default - good warning)
+  #   10 = Every 0.5 seconds (less frequent)
+  #   3  = Very frequent (lots of warning)
+  #
+  cracking-warning-interval: 3
+
+
+  # Max blocks that can play cracking sounds at once
+  #
+  #   Prevents sound spam when LOTS of blocks are about to collapse.
+  #
+  #   6  = Max 6 sounds at once (default)
+  #   10 = More sounds (might be noisy)
+  #   3  = Fewer sounds (quieter)
+  #
+  max-cracking-warnings-per-tick: 6
+
+
+  # ─────────────────────────────────────────────────────────────────────────
+  #  IMPACT FEEDBACK (the little "bite" each arrow leaves)
+  # ─────────────────────────────────────────────────────────────────────────
+  #
+  #  When an arrow (or other projectile) hits a wall, it adds a little chip of
+  #  damage. This shows that chip: a tiny puff of the block's particles and a
+  #  soft hit tick, right where the arrow landed.
+  #
+  #  So ten arrows look like ten little bites — not one wall quietly soaking
+  #  them all up. It is JUST a visual; the damage is exactly the same either way.
+
+  # Turn the per-hit impact feedback on or off
+  #
+  #   true  = See/hear each damaging hit (default - shows arrows are working)
+  #   false = No per-hit puff or tick (the wall still takes the same damage)
+  #
+  impact-feedback: true
+
+
+  # ─────────────────────────────────────────────────────────────────────────
+  #  CRACKS (visual block-break overlay on stressed/damaged blocks)
+  # ─────────────────────────────────────────────────────────────────────────
+  #
+  #  Blocks crack as they take damage or come under heavy load. This is the
+  #  CRACK telegraph; the separate WOBBLE telegraph (blocks rocking before they
+  #  fall) is the top-level `pre-collapse-shake` setting. They are independent —
+  #  run cracks, wobble, both, or neither, whichever you prefer.
+
+  # Master switch for ALL crack textures (from damage AND stress).
+  #   true  = blocks visibly crack (default)
+  #   false = no crack overlay at all (structures still collapse, just no telegraph)
+  cracks-enabled: true
+
+  # Minimum damage before cracks show (0.0-1.0)
+  #
+  #   0.05 = Show cracks from light damage, intensifying as it worsens (default)
+  #   0.15 = Wait until 15% damage before any crack shows
+  #   0.30 = Only show cracks for big damage
+  #
+  # Cracks scale with damage once visible, so a low floor gives progressive feedback
+  # (subtle early, ugly late) instead of a wall that looks pristine until it's nearly gone.
+  min-visible-damage: 0.05
+
+
+  # How far away you can see damage cracks (in blocks)
+  #
+  #   32 = See cracks from 32 blocks away (default)
+  #
+  damage-view-distance: 32.0
+
+
+  # Also crack blocks from structural STRESS, not just blast/impact damage.
+  # When on, a heavily-loaded wall visibly cracks under its own load, and as a
+  # structure starts to fail the cracks spread toward the break on their own
+  # (load redistributes onto neighbours each solve). Turn off if you only want
+  # cracks from actual damage.
+  stress-cracks-enabled: true
+
+  # Distress (= worse of stress-fraction and damage) at which each crack stage
+  # appears. Lower = blocks look cracked sooner (more dramatic, but noisier on
+  # normal builds whose bases are always somewhat loaded).
+  #
+  #   hairline  → faint cracks   (default 0.60)
+  #   cracked   → clear cracks   (default 0.78)
+  #   crumbling → heavy cracks   (default 0.90, last warning before collapse)
+  #
+  crack-hairline-threshold: 0.60
+  crack-cracked-threshold: 0.78
+  crack-crumbling-threshold: 0.90
+
+
+  # ─────────────────────────────────────────────────────────────────────────
+  #  EXPLOSION EFFECTS
+  # ─────────────────────────────────────────────────────────────────────────
+
+  # How far to show explosion damage messages (in blocks)
+  #
+  #   64 = Players within 64 blocks see damage reports (default)
+  #
+  explosion-notify-radius: 64.0
+
+
+  # Max debris pieces per explosion
+  #
+  #   Debris are the little falling blocks after explosions.
+  #
+  #   200 = Up to 200 debris pieces (default - looks good)
+  #   100 = Less debris (better for slow computers)
+  #   400 = Lots of debris (very dramatic!)
+  #
+  max-debris-per-explosion: 200
+
+
+  # ─────────────────────────────────────────────────────────────────────────
+  #  UNDERMINING (dig-under-a-wall look)
+  # ─────────────────────────────────────────────────────────────────────────
+
+  # When you dig out the block holding a wall up, the wall falls. These settings
+  # make that fall LOOK like you undermined it. They do not change the physics —
+  # the same blocks come down either way; this is just how the rubble behaves.
+  # (Rubble only spawns at all when rubble is turned on; see "rubble-enabled".)
+  undermine:
+
+    # Make the rubble slide into the tunnel you dug?
+    #
+    #   When a wall collapses, the falling blocks drift sideways toward the hole
+    #   you made, so the tunnel partly fills back in. It reads like the wall
+    #   slumped into the gap instead of dropping straight down.
+    #
+    #   true  = Rubble backfills the tunnel (default - looks great)
+    #   false = Rubble just falls straight down
+    #
+    backfill-rubble: true
+
+    # The most rubble blocks one collapse may spawn.
+    #
+    #   A huge undermine could try to drop hundreds of falling blocks at once,
+    #   which is laggy. This caps how many actually spawn. By default it shares
+    #   the explosion debris budget above.
+    #
+    #   200 = Up to 200 rubble blocks (default)
+    #   50  = Fewer blocks (better for slow computers)
+    #
+    max-rubble-per-collapse: 200
+
+
+  # ─────────────────────────────────────────────────────────────────────────
+  #  ACTIONBAR WARNINGS
+  # ─────────────────────────────────────────────────────────────────────────
+
+  # Stress level to show "⚠ CRITICAL STRESS" warning when placing blocks
+  #
+  #   When you place a block and something is about to break,
+  #   you see a big red warning above your hotbar!
+  #
+  #   0.90 = Warn at 90% stress (default)
+  #   0.80 = Warn earlier
+  #   0.95 = Only warn when really critical
+  #
+  critical-stress-warning-threshold: 0.90
+
+
+  # ─────────────────────────────────────────────────────────────────────────
+  #  COLLAPSE NOTIFICATIONS (chat)
+  # ─────────────────────────────────────────────────────────────────────────
+  #
+  #  Two friendly chat touches when buildings come down.
+
+  # Tell the WHOLE server when a big collapse happens?
+  #
+  #   When someone's build drops a lot of blocks at once, everyone sees:
+  #     💥 Steve's structure collapsed! (23 blocks)
+  #
+  #   true  = announce big collapses in chat (default)
+  #   false = stay quiet
+  #
+  big-collapse-broadcast-enabled: true
+
+
+  # How many blocks must collapse in one go before the server is told
+  #
+  #   Only collapses BIGGER than this number are announced, so small
+  #   ones don't spam chat.
+  #
+  #   15 = Only big collapses (default)
+  #   5  = Announce smaller ones too
+  #   30 = Only huge ones
+  #
+  #   Note: for a giant collapse that finishes over several ticks, the
+  #   count is the first-tick size (what fell right away), not the total.
+  #
+  big-collapse-broadcast-threshold: 15
+
+
+  # Send a one-time tip the FIRST time a player collapses their own build?
+  #
+  #   The very first collapse a player triggers, they get a private chat
+  #   tip suggesting /engineer (which shows what's holding a build up).
+  #   It only ever fires once per player.
+  #
+  #   true  = show the tip once (default)
+  #   false = never show it
+  #
+  first-collapse-hint-enabled: true
+  # Live stress summary: an always-on readout above your hotbar while you LOOK
+  # AT (or stand on) a tracked structure. It looks like:
+  #
+  #     World: ██░░░░ 34% avg | Peak: 78%
+  #
+  # The bar and "avg" are the average stress; "Peak" is the most-stressed block.
+  #
+  # NOTE: the numbers are WORLD-wide, not for the one structure you're aiming at
+  # (strux grades a whole world at once). The readout says "World:" so it's clear
+  # what it measures.
+  #
+  # If a "⚠ CRITICAL STRESS" warning fires the same moment, the warning wins and
+  # the summary steps aside — so the text never flickers between the two.
+  #
+  #   false = off (default — existing servers see no change)
+  #   true  = show the live summary
+  #
+  stress-summary-enabled: false
+
+
+  # How often the live stress summary refreshes (in ticks, 20 = 1 second)
+  #
+  #   10 = Twice a second (default — smooth, cheap)
+  #   20 = Once a second (cheaper)
+  #   5  = Very snappy (more frequent)
+  #
+  stress-summary-interval-ticks: 10
+  #  NEAR-MISS NOTIFICATION
+  # ─────────────────────────────────────────────────────────────────────────
+
+  # Tell you "Close call" when a block you knocked loose collapses while it
+  # was barely holding on.
+  #
+  #   true  = Show the message (default)
+  #   false = Stay quiet
+  #
+  near-miss-notification-enabled: true
+
+  # How close to failing a block had to be to count as a "close call".
+  #
+  #   This is a fraction of the block's limit. 1.0 means exactly at the limit.
+  #   A collapse just above this counts; one far above does not (that block
+  #   was never really holding).
+  #
+  #   0.98 = Only blocks that were almost holding (default)
+  #   0.90 = More collapses count as close calls
+  #
+  near-miss-threshold: 0.98
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+#  DEBUG SETTINGS
+# ═══════════════════════════════════════════════════════════════════════════
+
+# Print detailed stress calculations to server console
+#
+#   true  = Shows every stress calculation (LOTS of spam, for debugging)
+#   false = Quiet mode (normal gameplay)
+#
+debug-logging: false
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+#  MATERIAL PROPERTIES
+# ═══════════════════════════════════════════════════════════════════════════
+#
+#  Each block type has TWO properties:
+#
+#    mass     = How HEAVY the block is (pushes down on blocks below)
+#    max-load = How much weight it can HOLD before breaking
+#
+#  Example:
+#    Stone: mass=3.0, max-load=100.0 (heavy but very strong)
+#    Wood:  mass=1.0, max-load=40.0  (light, moderate strength)
+#    Glass: mass=0.5, max-load=5.0   (very light, breaks easily)
+#
+#  You can override any material below. Format:
+#    MATERIAL_NAME:
+#      mass: <number>
+#      max-load: <number>
+#
+#  Uncomment and edit to customize:
+
+# materials:
+#   STONE:
+#     mass: 3.0
+#     max-load: 100.0
+#
+#   OAK_PLANKS:
+#     mass: 0.8
+#     max-load: 28.0
+#
+#   IRON_BLOCK:
+#     mass: 5.0
+#     max-load: 150.0
+#
+#   # Make wool super strong for fun:
+#   WHITE_WOOL:
+#     mass: 0.3
+#     max-load: 500.0
+
+
+# Default properties for blocks not listed above are set via the special
+# `default` key inside the `materials:` section above (see the commented
+# `default:` example there) — that is the key the loader actually reads.
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+#  FOUNDATIONS & NATURAL TERRAIN
+# ═══════════════════════════════════════════════════════════════════════════
+#
+#  How does a build "reach the ground"?
+#
+#  Normally a build only counts as grounded if it touches BEDROCK or the very
+#  bottom layer of the world. That is fine for arenas, but in a survival world
+#  you build on dirt and stone - there is no bedrock in sight!
+#
+#  This section lets a build anchor to NATURAL TERRAIN (dirt, stone, sand,
+#  gravel, ore... the blocks the world generated), so it stands up without
+#  digging down to bedrock.
+#
+#  IMPORTANT: both options below are OFF by default. Existing servers keep the
+#  old behaviour exactly. Turn them on only if you want builds to anchor to
+#  terrain.
+#
+foundation:
+
+  # DEPTH GROUNDING
+  #
+  #  When ON, a block is treated as standing on solid ground if it has enough
+  #  solid natural-terrain blocks STRAIGHT BELOW it (an unbroken column). Think
+  #  of it as a foundation reaching down to bedrock.
+  #
+  #      [your build]   <- grounded, because...
+  #      [DIRT]    \
+  #      [STONE]    |  ...there are min-depth terrain blocks below it
+  #      [STONE]    |
+  #      [STONE]   /
+  #
+  #  The column must be UNBROKEN: the first air block (a cave, an overhang)
+  #  stops the count.
+  #
+  #   true  = builds anchor to deep terrain (good for survival worlds)
+  #   false = only bedrock / world floor anchors a build (default, unchanged)
+  #
+  depth-grounding-enabled: false
+
+  # How many terrain blocks must be below a block to ground it (the N above).
+  #
+  #   4 = needs 4 solid terrain blocks straight below (default)
+  #   1 = grounds on a single terrain block (very loose)
+  #
+  #  Higher = stricter (only builds with deep ground beneath stand on their own).
+  #
+  min-depth: 4
+
+  # FOUNDATION BLOCK
+  #
+  #  A material that acts as a ground anchor when it is placed on solid terrain.
+  #  Place it as the base of your build and the build is grounded there.
+  #
+  #  Leave EMPTY ("") for no foundation block (default). Example values:
+  #   foundation-block: "REINFORCED_DEEPSLATE"
+  #   foundation-block: "BRICKS"
+  #
+  foundation-block: ""
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+#  REGION & WORLD PROTECTION
+# ═══════════════════════════════════════════════════════════════════════════
+#
+#  Stops collapses where you DON'T want them - like spawn, shops, or arenas.
+#
+#  Two ways to control where physics runs:
+#    1. Turn it off in whole worlds (disabled-worlds below)
+#    2. Turn it off in WorldGuard regions (the strux-physics flag)
+#
+#  Even a collapse that STARTS somewhere allowed will NOT destroy blocks that
+#  fall inside a protected area - so spawn stays safe no matter what.
+#
+regions:
+
+  # Master switch for region/world protection.
+  #
+  #   true  = honor the rules below (recommended)
+  #   false = physics runs EVERYWHERE, no protection at all
+  #
+  enabled: true
+
+
+  # Worlds where physics NEVER runs (blocks behave like vanilla).
+  #
+  #   Names are case-insensitive. Example:
+  #     disabled-worlds:
+  #       - world_nether
+  #       - creative_plots
+  #
+  disabled-worlds: []
+
+
+  # Honor the WorldGuard "strux-physics" region flag? (only if WorldGuard is installed)
+  #
+  #   When true, admins can protect a region with:
+  #     /rg flag <region> strux-physics deny    ← physics OFF in this region
+  #     /rg flag <region> strux-physics allow   ← physics ON  (this is the default)
+  #
+  #   The flag defaults to ALLOW, so physics works everywhere until you deny it.
+  #
+  #   true  = respect the flag (recommended)
+  #   false = ignore WorldGuard entirely
+  #
+  respect-worldguard: true
+
+
+  # ───────────────────────────────────────────────────────────────────────────
+  #  WAR-ZONE SCOPING (siege mode)
+  # ───────────────────────────────────────────────────────────────────────────
+  #
+  #  When enabled, strux destruction (collapses, blasts, ram/projectile impact,
+  #  fire) ONLY happens inside an ACTIVE war zone. Everywhere else, structures
+  #  are collapse-proof. This turns strux into a siege mechanic: walls crumble
+  #  during a war and are safe in peacetime. WorldGuard region flags still apply
+  #  on top (a denied region is always protected, war or not).
+  #
+  war-zone:
+
+    # Master switch for war-zone scoping.
+    #   false = no scoping; destruction allowed wherever region rules permit (default)
+    #   true  = destruction only inside an active war zone (see providers below)
+    enabled: false
+
+    # Which plugin(s) define a "war zone". Hooked reflectively, so no extra
+    # dependency is needed; a provider that isn't installed is skipped.
+    #   towny    = during a Towny war, inside town claims
+    #   factions = inside Factions "WarZone" territory
+    # If both are listed, a location is a war zone if EITHER says so.
+    providers: [towny, factions]
+
+    # Count unclaimed wilderness as a war zone during war?
+    #   false = only claimed/war territory is destructible (recommended)
+    #   true  = also allow destruction in the wild
+    allow-wilderness: false
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+#  REINFORCEMENT (counterplay to sieges)
+# ═══════════════════════════════════════════════════════════════════════════
+#
+#  Players raise a block's load capacity by reinforcing it — with the craftable
+#  Support Beam item (right-click a block) or /strux reinforce. Reinforcement is
+#  a persistent multiplier on max load (1.0 = none) and is saved with the world.
+#
+reinforcement:
+
+  # Capacity added per Support Beam, as a fraction (0.5 = +50% load capacity).
+  per-item: 0.5
+
+  # Capacity added per /strux reinforce use.
+  command-add: 0.5
+
+  # Hard cap on the reinforcement multiplier (4.0 = up to +300% capacity).
+  max-multiplier: 4.0
+
+  # Give players the craftable Support Beam item + right-click handler?
+  item-enabled: true
+
+  # Register the Support Beam crafting recipe (3 iron ingots in a column)?
+  recipe-enabled: true
+
+  # How many Support Beams one craft yields.
+  recipe-yield: 2
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+#  ECONOMY (optional, requires Vault + an economy plugin)
+# ═══════════════════════════════════════════════════════════════════════════
+#
+#  Charge currency for strux actions. All costs default to 0 (free). With no
+#  Vault/economy plugin installed, charges are skipped entirely.
+#
+economy:
+
+  # Cost to reinforce a block with a Support Beam item (the beam is also consumed).
+  reinforce-cost: 0.0
+
+  # Cost to reinforce via /strux reinforce (no item needed).
+  reinforce-command-cost: 0.0
+
+  # Cost to repair (clear damage on) a block via /strux repair.
+  repair-cost: 0.0
+
+  # One-off cost charged each time a player turns on engineer mode (paid perk).
+  engineer-cost: 0.0
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+#  MATERIAL TUNING (optional)
+# ═══════════════════════════════════════════════════════════════════════════
+#
+#  Override the built-in physical properties of any block. Only the axes you
+#  set are changed; the rest keep their defaults. Use the Minecraft material
+#  name (e.g. STONE, OAK_PLANKS). The special key "default" tunes any block
+#  that has no explicit entry.
+#
+#  Axes:
+#    mass             how heavy the block is (pushes down on what's below)
+#    max-load         how much load it carries before failing
+#    blast-resistance >1 shrugs off explosions, <1 is fragile
+#    fire-resistance  higher = slower to weaken in fire
+#
+#  Example (uncomment and tweak):
+#
+#  materials:
+#    STONE:
+#      mass: 3.0
+#      max-load: 120.0
+#    OAK_PLANKS:
+#      max-load: 25.0
+#    default:
+#      mass: 2.0
+#      max-load: 30.0
+#
+#materials: {}
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+#  COLLAPSE LOGGING
+# ═══════════════════════════════════════════════════════════════════════════
+#
+#  Keeps a record of every block destroyed by a collapse, so you can answer
+#  "what flattened my base?" and even UNDO a bad collapse.
+#
+logging:
+
+  # Log collapses to CoreProtect? (only if CoreProtect is installed)
+  #
+  #   Collapses are logged under the user "#strux", so you can:
+  #     /co inspect                 → click a block to see if strux removed it
+  #     /co rollback u:#strux t:5m  → restore everything strux collapsed in 5 min
+  #
+  #   true  = log collapses (recommended - accountability + rollback)
+  #   false = don't log
+  #
+  coreprotect: true
+
+  # ───────────────────────────────────────────────────────────────────────
+  #  RESTORE SCAN  (undo detection after a /co rollback)
+  # ───────────────────────────────────────────────────────────────────────
+  #
+  #  When CoreProtect rolls a block back, strux clears the leftover cracks.
+  #  It finds them by asking CoreProtect's database about damaged blocks.
+  #
+  #  A big blast can damage thousands of blocks at once. Asking about all of
+  #  them in one tick would freeze the server, so the scan is throttled.
+  #
+  restore-scan:
+
+    # How often the scan runs, in ticks (20 ticks = 1 second).
+    #   100 = every 5 seconds (recommended)
+    interval-ticks: 100
+
+    # How many database questions ONE scan may ask.
+    #   Extra blocks wait for the next scan, taking turns so none is skipped.
+    #   50 = a light, steady trickle (recommended)
+    max-lookups-per-run: 50
+
+    # Skip the scan while a blast or collapse is still happening?
+    #   Undo detection can wait a few seconds; the busy ticks cannot.
+    #   true  = wait until the dust settles (recommended)
+    #   false = always scan, even mid-collapse
+    defer-during-cascade: true
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+#  PERSISTENCE SETTINGS
+# ═══════════════════════════════════════════════════════════════════════════
+#
+#  Persistence saves your structures so they survive server restarts!
+#
+#  Without persistence:
+#    Server restarts → All structure data is LOST
+#    (blocks still exist, but the plugin "forgets" about them)
+#
+#  With persistence:
+#    Server restarts → Structures are loaded back
+#    (plugin remembers which blocks are connected)
+#
+persistence:
+
+  # Enable or disable saving structure data
+  #
+  #   true  = Structures are saved and loaded (recommended)
+  #   false = Data is lost on restart (useful for testing)
+  #
+  enabled: true
+
+
+  # Which storage system to use
+  #
+  #   file = Save to files in the plugin folder (simple, works everywhere)
+  #   api  = Send to an external API (for server clusters, advanced)
+  #
+  type: file
+
+
+  # How often to auto-save (in seconds)
+  #
+  #   300 = Every 5 minutes (default, balanced)
+  #   60  = Every minute (safer, more disk writes)
+  #   0   = Disabled (only save on shutdown)
+  #
+  auto-save-interval: 300
+
+
+  # ─────────────────────────────────────────────────────────────────────────
+  #  API SETTINGS (only used if type: api)
+  # ─────────────────────────────────────────────────────────────────────────
+  #
+  #  For large server networks, you can use an external API to store
+  #  structure data. This allows multiple servers to share the same data.
+  #
+  api:
+    # Base URL of the API server
+    url: "http://localhost:8080"
+
+    # API key for authentication (leave empty if not needed)
+    api-key: ""
+
+    # Request timeout in seconds
+    timeout: 30
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+#  MEMORY EVICTION (long-run durability, off by default)
+# ═══════════════════════════════════════════════════════════════════════════
+#
+#  Every player-placed block is tracked forever, so on a big server that runs for
+#  weeks the tracked set grows without bound. This parks a structure in a small
+#  in-memory sidecar and drops it from the live graph once ALL of its chunks are
+#  unloaded, then restores it — exactly as it was — the moment any of its chunks
+#  loads again. Memory is then bounded to "structures near loaded chunks".
+#
+#  It is invisible: a restored structure collapses identically to one that was
+#  never evicted. New machinery, so it ships OFF; turn it on for long-run servers.
+#
+memory:
+  eviction:
+
+    # Master switch. false = nothing is ever evicted (default).
+    enabled: false
+
+    # Wait this many ticks after a chunk unloads before its structures may be
+    # evicted. Prevents thrashing when a player travels back and forth. 200 = 10s.
+    grace-ticks: 200
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+#  EVENT RECORDING (playtesting and debugging)
+# ═══════════════════════════════════════════════════════════════════════════
+#
+#  Records structural events (breaks, blasts, collapses) for replay and analysis.
+#  Perfect for debugging physics issues, playtesting structural behavior, and
+#  verifying deterministic replay.
+#
+#  Recorded sessions are saved to plugins/StructuralIntegrity/recordings/ as
+#  compact binary .strx files by default (or .json — see binary-format below).
+#
+recording:
+
+  # Auto-record on server start (no command needed for local testing)
+  #
+  #   true  = recording starts automatically on world load
+  #   false = use /strux record start to begin recording manually
+  #
+  auto-record: false
+
+  # Maximum events buffered before async flush to disk.
+  #
+  #   100 = flush every 100 events or 1 second, whichever is first (default)
+  #
+  buffer-size: 100
+
+  # Maximum saved sessions before auto-cleanup (FIFO - oldest deleted first).
+  #
+  #   20 = keep up to 20 recordings (default)
+  #
+  max-sessions: 20
+
+  # Include stress updates in recording? (verbose, opt-in)
+  #
+  #   true  = record stress recalculations (huge files, for deep analysis)
+  #   false = only record structural events (default, recommended)
+  #
+  include-stress-updates: false
+
+  # Maximum events captured per server tick (backpressure protection).
+  # Prevents lag spikes during mass destruction (e.g., big explosion).
+  #
+  #   50 = drop excess events if >50 occur in one tick (default)
+  #
+  max-events-per-tick: 50
+
+  # Save recordings as the compact binary .strx container?
+  #
+  #   true  = write .strx (small + fast to load, the default)
+  #   false = write .json (human-readable, much bigger; for debugging/diffing)
+  #
+  # JSON is always READABLE either way; this only controls what new recordings
+  # are written as. A single capture can be forced to JSON with
+  # /strux record start --json.
+  #
+  binary-format: true
+
+  # Capture stress snapshots (StressDelta) on break/blast events?
+  #
+  # Records, for each event, the blocks whose load ratio crossed a 0.25/0.5/0.75/
+  # 0.9/1.0 line while it settled — so a replay can show stress migrate toward the
+  # failure point. Costs nothing when off. Match recordings (started by a host via
+  # the RecordingService) turn this on automatically regardless of this default.
+  #
+  #   true  = capture stress for every recording
+  #   false = only match recordings capture it (default)
+  #
+  capture-stress: false
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+#  METRICS OVERLAY (real-time performance display)
+# ═══════════════════════════════════════════════════════════════════════════
+#
+#  Shows a boss bar with real-time physics metrics: solve times, block counts,
+#  stress hotspots. Useful for testing and debugging.
+#
+metrics-overlay:
+
+  # Enable the metrics overlay boss bar?
+  #
+  #   true  = show metrics to players who toggle it on
+  #   false = disable entirely
+  #
+  enabled: true
+
+  # How often to update the overlay (in ticks).
+  #
+  #   5  = every 0.25 seconds (default, smooth)
+  #   10 = every 0.5 seconds
+  #   20 = every second
+  #
+  update-interval-ticks: 5
