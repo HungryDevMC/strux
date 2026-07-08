@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1783512236224,
+  "lastUpdate": 1783515185034,
   "repoUrl": "https://github.com/HungryDevMC/strux",
   "entries": {
     "strux JMH benchmarks": [
@@ -284,6 +284,102 @@ window.BENCHMARK_DATA = {
           {
             "name": "One full stress solve over a 5x5xheight stone tower (height = 10) ( {\"height\":\"10\"} )",
             "value": 130.17463244739818,
+            "unit": "us/op",
+            "extra": "iterations: 3\nforks: 1\nthreads: 1"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "algorithm1401@gmail.com",
+            "name": "HungryDevMC",
+            "username": "HungryDevMC"
+          },
+          "committer": {
+            "email": "algorithm1401@gmail.com",
+            "name": "HungryDevMC",
+            "username": "HungryDevMC"
+          },
+          "distinct": true,
+          "id": "68a236547b25d5b3b9bbed321c055bda51804910",
+          "message": "fix(build): benchmark-name self-test skips when python3 is absent\n\nA bare 'python3' Exec wired into check dies with ProcessExecutionException\non JDK-only environments and takes the whole build down. Resolve the\ninterpreter from fixed locations at configuration time and skip with a\nwarning when absent — the benchmark pipeline that runs the humanizer\nprovides its own python.",
+          "timestamp": "2026-07-08T14:51:35+02:00",
+          "tree_id": "28757dd9e273aba04149134ddf09a89bf5fa1bdb",
+          "url": "https://github.com/HungryDevMC/strux/commit/68a236547b25d5b3b9bbed321c055bda51804910"
+        },
+        "date": 1783515184233,
+        "tool": "jmh",
+        "benches": [
+          {
+            "name": "Cascade: knock out one pillar of a 21-wide bridge so the deck cantilevers and trims back",
+            "value": 153.35553121169235,
+            "unit": "us/op",
+            "extra": "iterations: 3\nforks: 1\nthreads: 1"
+          },
+          {
+            "name": "Cascade: a 40-block-tall column loses its base and drops as floating debris",
+            "value": 64.66631042486172,
+            "unit": "us/op",
+            "extra": "iterations: 3\nforks: 1\nthreads: 1"
+          },
+          {
+            "name": "Scoped cascade: break a block mid-tower on 200x200 siege terrain (same tower, large connected world - terrain size should not matter)",
+            "value": 439866.09300000005,
+            "unit": "us/op",
+            "extra": "iterations: 3\nforks: 1\nthreads: 1"
+          },
+          {
+            "name": "Scoped cascade: break a block mid-tower on 50x50 siege terrain (~375-block tower on a small connected world)",
+            "value": 45423.67881446341,
+            "unit": "us/op",
+            "extra": "iterations: 3\nforks: 1\nthreads: 1"
+          },
+          {
+            "name": "Scoped stress-solve of one structure in a shared world (should stay flat as the world grows) (structures = 1) ( {\"structures\":\"1\"} )",
+            "value": 5.586619779128345,
+            "unit": "us/op",
+            "extra": "iterations: 3\nforks: 1\nthreads: 1"
+          },
+          {
+            "name": "Scoped stress-solve of one structure in a shared world (should stay flat as the world grows) (structures = 50) ( {\"structures\":\"50\"} )",
+            "value": 4.861886623378539,
+            "unit": "us/op",
+            "extra": "iterations: 3\nforks: 1\nthreads: 1"
+          },
+          {
+            "name": "Scoped stress-solve of one structure in a shared world (should stay flat as the world grows) (structures = 200) ( {\"structures\":\"200\"} )",
+            "value": 7.418009001744122,
+            "unit": "us/op",
+            "extra": "iterations: 3\nforks: 1\nthreads: 1"
+          },
+          {
+            "name": "Whole-world stress-solve: every structure in the world (grows with structure count) (structures = 1) ( {\"structures\":\"1\"} )",
+            "value": 4.6769029389506995,
+            "unit": "us/op",
+            "extra": "iterations: 3\nforks: 1\nthreads: 1"
+          },
+          {
+            "name": "Whole-world stress-solve: every structure in the world (grows with structure count) (structures = 50) ( {\"structures\":\"50\"} )",
+            "value": 620.2592545250791,
+            "unit": "us/op",
+            "extra": "iterations: 3\nforks: 1\nthreads: 1"
+          },
+          {
+            "name": "Whole-world stress-solve: every structure in the world (grows with structure count) (structures = 200) ( {\"structures\":\"200\"} )",
+            "value": 3959.9258568928885,
+            "unit": "us/op",
+            "extra": "iterations: 3\nforks: 1\nthreads: 1"
+          },
+          {
+            "name": "One full stress solve over a 5x5xheight stone tower (height = 4) ( {\"height\":\"4\"} )",
+            "value": 45.819048517511995,
+            "unit": "us/op",
+            "extra": "iterations: 3\nforks: 1\nthreads: 1"
+          },
+          {
+            "name": "One full stress solve over a 5x5xheight stone tower (height = 10) ( {\"height\":\"10\"} )",
+            "value": 194.26844654747825,
             "unit": "us/op",
             "extra": "iterations: 3\nforks: 1\nthreads: 1"
           }
